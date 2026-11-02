@@ -1,6 +1,9 @@
 # Paste your keys after the = sign. No quotes, no spaces.
 # Save this file as keys.txt in the same folder (keys.txt is ignored by git).
-# Groq (default AI for text + voice generation)
+# ElevenLabs (natural Egyptian female voice + voice cloning)
+ELEVENLABS_API_KEY=
+
+# Groq (default AI for text; also a voice option)
 GROQ_API_KEY=
 
 # Claude (optional AI for text, pick it in the sidebar)

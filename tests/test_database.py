@@ -56,6 +56,16 @@ class DatabaseTests(unittest.TestCase):
         s = db.list_authorized_senders()[0]
         self.assertEqual((s["original_input"], s["normalized_e164"]), ("01000000000", "+201000000000"))
 
+    def test_voice_clone_requires_consent(self):
+        db = Database(self.path)
+        with self.assertRaises(ValueError):
+            db.add_voice_clone("elevenlabs", "v1", "Mona", 2, "   ")
+        db.add_voice_clone("elevenlabs", "v1", "Mona", 2, "I own this voice")
+        rows = db.list_voice_clones("elevenlabs")
+        self.assertEqual((rows[0]["voice_id"], rows[0]["sample_count"]), ("v1", 2))
+        db.delete_voice_clone("v1")
+        self.assertEqual(db.list_voice_clones(), [])
+
     def test_send_log(self):
         db = Database(self.path)
         db.log_send("+201123040202", "123", "/x.mp3", "sent", "wamid.1")

@@ -31,6 +31,8 @@ DEFAULTS = {
     "GROQ_TEXT_MODEL": "llama-3.3-70b-versatile",
     "CLAUDE_MODEL": "claude-opus-5-5",
     "CLAUDE_EFFORT": "medium",
+    "ELEVENLABS_MODEL": "eleven_multilingual_v2",
+    "ELEVENLABS_VOICE_ID": "",
     "GROQ_TTS_MODEL": "canopylabs/orpheus-arabic-saudi",
     "GROQ_TTS_VOICE": "noura",
     "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
@@ -56,6 +58,8 @@ def load_env_file() -> bool:
 
 
 KEY_ALIASES = {
+    "elevenlabs": "ELEVENLABS_API_KEY", "eleven_labs": "ELEVENLABS_API_KEY", "elevenlabs_api_key": "ELEVENLABS_API_KEY",
+    "eleven": "ELEVENLABS_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY", "anthropic_api_key": "ANTHROPIC_API_KEY",
     "claude": "ANTHROPIC_API_KEY", "claude_api": "ANTHROPIC_API_KEY", "claude_api_key": "ANTHROPIC_API_KEY",
     "groq": "GROQ_API_KEY", "groq_api": "GROQ_API_KEY", "groq_api_key": "GROQ_API_KEY",
@@ -198,6 +202,20 @@ def claude_effort() -> str:
     return effort if effort in ("low", "medium", "high", "xhigh", "max") else "medium"
 
 
+# --- ElevenLabs (natural voices + voice cloning) ----------------------------
+
+def elevenlabs_api_key() -> str:
+    return get_setting("ELEVENLABS_API_KEY")
+
+
+def elevenlabs_model() -> str:
+    return get_setting("ELEVENLABS_MODEL")
+
+
+def elevenlabs_voice_id() -> str:
+    return get_setting("ELEVENLABS_VOICE_ID")
+
+
 # --- Voice providers -------------------------------------------------------
 
 def groq_api_key() -> str:
@@ -268,6 +286,7 @@ def credential_status() -> dict[str, bool]:
     return {
         name: has_setting(name)
         for name in (
+            "ELEVENLABS_API_KEY",
             "ANTHROPIC_API_KEY",
             "GROQ_API_KEY",
             "OPENAI_API_KEY",

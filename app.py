@@ -23,8 +23,10 @@ from src.text_refiner import (
     refine_to_egyptian,
     write_message,
 )
+from src import elevenlabs_service
 from src.tts_service import (
     GROQ_ARABIC_VOICES,
+    PROVIDER_ELEVENLABS,
     PROVIDER_GROQ,
     PROVIDER_ORDER,
     PROVIDER_WINDOWS,
@@ -67,7 +69,7 @@ with st.sidebar:
     if config.LOADED_KEYS_FILE:
         st.caption(f"Keys file: `{config.LOADED_KEYS_FILE.name}`")
     key_labels = {
-        "ANTHROPIC_API_KEY": "Claude key", "GROQ_API_KEY": "Groq key", "OPENAI_API_KEY": "OpenAI key",
+        "ELEVENLABS_API_KEY": "ElevenLabs key", "ANTHROPIC_API_KEY": "Claude key", "GROQ_API_KEY": "Groq key", "OPENAI_API_KEY": "OpenAI key",
         "AZURE_SPEECH_KEY": "Azure key", "AZURE_SPEECH_REGION": "Azure region", "WHATSAPP_ACCESS_TOKEN": "WhatsApp token",
     }
     chips([(key_labels.get(name, name), "ok" if present else "off", "") for name, present in creds.items()])
@@ -115,9 +117,19 @@ kpis([
     ("Authorized senders", str(len(senders))),
 ])
 
-tab_generate, tab_contacts, tab_senders, tab_log = st.tabs(
-    ["Studio", "Contacts", "Authorized senders", "Activity"]
+tab_generate, tab_voicelab, tab_contacts, tab_senders, tab_log = st.tabs(
+    ["Studio", "Voice lab", "Contacts", "Authorized senders", "Activity"]
 )
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def cached_voices(_key_present: bool) -> list[dict]:
+    if not _key_present:
+        return []
+    try:
+        return [v.__dict__ for v in elevenlabs_service.list_voices()]
+    except (elevenlabs_service.ElevenLabsSetupError, elevenlabs_service.ElevenLabsError):
+        return []
 
 # =============================================================================
 # Studio
@@ -184,7 +196,7 @@ with tab_generate:
             st.warning(engine_msg)
 
     # ---- Step 2: voice -------------------------------------------------------
-    step(2, "Generate the voice", "Groq Orpheus Arabic first; OpenAI, Azure and Windows as alternatives.")
+    step(2, "Generate the voice", "ElevenLabs natural voice first (soft Egyptian female or your clone); Azure, Groq, OpenAI and Windows as alternatives.")
     col_prov, col_voice, col_go = st.columns([2, 1.4, 1.2], gap="large")
 
     with col_prov:
@@ -192,7 +204,7 @@ with tab_generate:
             "Voice provider",
             PROVIDER_ORDER,
             index=PROVIDER_ORDER.index(default_provider()),
-            help="Order of preference: Groq, OpenAI, Azure, then the Windows fallback.",
+            help="Order of preference: ElevenLabs, Azure Egyptian, Groq, OpenAI, then the Windows fallback.",
         )
         status = next(s for s in statuses if s.name == provider)
         if not status.ready:
@@ -200,8 +212,37 @@ with tab_generate:
         if provider == PROVIDER_WINDOWS:
             st.warning(status.warning)
 
+    voice_options: dict = {}
     with col_voice:
-        if provider == PROVIDER_GROQ:
+        if provider == PROVIDER_ELEVENLABS:
+            voices = cached_voices(elevenlabs_service.available())
+            clones = {c["voice_id"] for c in db.list_voice_clones("elevenlabs")}
+            if voices:
+                labels = [("★ " if v["voice_id"] in clones else "") + elevenlabs_service.Voice(**v).label for v in voices]
+                default_id = config.elevenlabs_voice_id()
+                default_idx = next((i for i, v in enumerate(voices) if v["voice_id"] == default_id), 0)
+                pick = st.selectbox("Voice", labels, index=default_idx, help="★ = your cloned voices. Female voices are listed first.")
+                voice = voices[labels.index(pick)]["voice_id"]
+            else:
+                voice = st.text_input("Voice id", value=config.elevenlabs_voice_id(), placeholder="paste an ElevenLabs voice_id")
+                if elevenlabs_service.available():
+                    st.caption("Could not list voices. Paste a voice_id or add a voice in the Voice lab.")
+            with st.expander("Delivery", expanded=False):
+                model_ids = list(elevenlabs_service.MODELS)
+                model_id = st.selectbox(
+                    "Model", model_ids,
+                    index=model_ids.index(config.elevenlabs_model()) if config.elevenlabs_model() in model_ids else 0,
+                    format_func=lambda m: elevenlabs_service.MODELS[m],
+                )
+                softness = st.slider("Softness", 0.0, 1.0, 0.65, 0.05, help="Higher = calmer, steadier delivery.")
+                warmth = st.slider("Closeness to the voice", 0.5, 1.0, 0.85, 0.05, help="Similarity to the original speaker.")
+                expressive = st.slider("Expressiveness", 0.0, 0.6, 0.15, 0.05)
+                pace = st.slider("Pace", 0.8, 1.15, 0.95, 0.05)
+            voice_options = {
+                "model_id": model_id,
+                "settings": {"stability": softness, "similarity_boost": warmth, "style": expressive, "use_speaker_boost": True, "speed": pace},
+            }
+        elif provider == PROVIDER_GROQ:
             voice = st.selectbox(
                 "Voice",
                 GROQ_ARABIC_VOICES,
@@ -218,7 +259,7 @@ with tab_generate:
         if st.button("Generate voice", type="primary", use_container_width=True, disabled=not text.strip()):
             with st.spinner(f"Generating with {provider}..."):
                 try:
-                    mp3 = generate_speech(text, provider, voice or None)
+                    mp3 = generate_speech(text, provider, voice or None, options=voice_options)
                     st.session_state["last_audio"] = str(mp3)
                     st.toast(f"Saved {mp3.name}", icon="✅")
                 except TTSSetupError as exc:
@@ -302,6 +343,80 @@ with tab_generate:
             st.link_button("Manual send: open WhatsApp chat", manual_chat_link(recipient_norm.normalized_e164), use_container_width=True)
             st.caption("Then attach this file yourself:")
             st.code(last_audio, language="text")
+
+
+# =============================================================================
+# Voice lab: natural voices and consent-gated cloning
+# =============================================================================
+with tab_voicelab:
+    step(1, "Clone a voice", "Upload clean samples of the speaker, confirm consent, and the clone appears in Step 2.")
+    if not elevenlabs_service.available():
+        st.warning("Add ELEVENLABS_API_KEY to your keys file to enable natural voices and cloning.")
+    st.caption(
+        "For an authentic Egyptian accent, clone an Egyptian speaker you have permission from. "
+        "Best results: 1–3 minutes of clear speech, one speaker, no music or echo. Instant cloning gets close, not identical."
+    )
+    with st.form("clone_voice", clear_on_submit=False):
+        v1, v2 = st.columns(2, gap="large")
+        clone_name = v1.text_input("Voice name", placeholder="e.g. Mona")
+        clone_gender = v2.selectbox("Gender label", ["female", "male"])
+        samples = st.file_uploader(
+            "Audio samples (mp3, wav, m4a, ogg)", type=["mp3", "wav", "m4a", "ogg", "flac"], accept_multiple_files=True
+        )
+        remove_noise = st.checkbox("Remove background noise", value=True)
+        consent = st.checkbox(elevenlabs_service.CONSENT_TEXT)
+        submitted = st.form_submit_button("Clone voice", type="primary", disabled=not elevenlabs_service.available())
+    if submitted:
+        if not consent:
+            st.error("Tick the consent confirmation first. Cloning without the speaker's permission is not allowed.")
+        elif not samples:
+            st.error("Upload at least one audio sample.")
+        else:
+            import tempfile
+
+            with st.spinner("Cloning..."):
+                try:
+                    with tempfile.TemporaryDirectory() as tmp:
+                        paths = []
+                        for up in samples:
+                            dest = Path(tmp) / up.name
+                            dest.write_bytes(up.getbuffer())
+                            paths.append(dest)
+                        result = elevenlabs_service.clone_voice(
+                            clone_name, paths, remove_noise=remove_noise,
+                            labels={"language": "ar", "accent": "Egyptian", "gender": clone_gender},
+                        )
+                    db.add_voice_clone("elevenlabs", result.voice.voice_id, clone_name, len(samples), elevenlabs_service.CONSENT_TEXT)
+                    cached_voices.clear()
+                    msg = f"Cloned “{clone_name}”. Select it in Step 2 under ElevenLabs."
+                    if result.requires_verification:
+                        msg += " ElevenLabs asks you to verify this voice in their dashboard before use."
+                    st.success(msg)
+                except (ValueError, elevenlabs_service.ElevenLabsSetupError, elevenlabs_service.ElevenLabsError) as exc:
+                    st.error(str(exc))
+
+    step(2, "Your cloned voices", "Consent is recorded locally for each clone.")
+    clones = db.list_voice_clones("elevenlabs")
+    if clones:
+        st.dataframe(
+            [{k: c[k] for k in ("name", "voice_id", "sample_count", "consent_at")} for c in clones],
+            use_container_width=True, hide_index=True,
+        )
+        pick = st.selectbox("Clone", [f"{c['name']} ({c['voice_id']})" for c in clones])
+        if st.button("Delete this clone from ElevenLabs and this app"):
+            vid = pick.rsplit("(", 1)[1].rstrip(")")
+            try:
+                elevenlabs_service.delete_voice(vid)
+            except (elevenlabs_service.ElevenLabsSetupError, elevenlabs_service.ElevenLabsError) as exc:
+                st.warning(f"ElevenLabs: {exc}")
+            db.delete_voice_clone(vid)
+            cached_voices.clear()
+            st.rerun()
+    else:
+        st.caption("No clones yet.")
+
+    step(3, "Premade natural voices", "Any voice from your ElevenLabs library shows up in Step 2. Female voices are listed first.")
+    st.caption("Add Arabic female voices to your library in the ElevenLabs dashboard (Voice Library → Arabic), then they appear here.")
 
 # =============================================================================
 # Contacts

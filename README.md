@@ -29,12 +29,26 @@ providers below.
 
 | # | Provider | Default model / voice | Notes |
 |---|----------|-----------------------|-------|
-| 1 | Groq Orpheus Arabic TTS | `canopylabs/orpheus-arabic-saudi` / `noura` | WAV only, 200 chars per request. The app splits long text and merges chunks with ffmpeg. Voices: noura, lulwa, aisha, abdullah, fahad, sultan. |
-| 2 | OpenAI TTS | `gpt-4o-mini-tts` / `alloy` | MP3 output. |
-| 3 | Azure Arabic Egypt Neural TTS | `ar-EG-SalmaNeural` | Uses the Azure Speech REST endpoint for your region. |
-| 4 | Windows TTS fallback | SAPI5 via `pyttsx3` | Offline, robotic, Windows only. Shown with a warning. |
+| 1 | ElevenLabs natural voice | `eleven_multilingual_v2` (switch to `eleven_v4` for top quality) | Natural, soft delivery with tunable softness/pace. Pick any voice from your ElevenLabs library, or **clone a voice** in the Voice lab tab. |
+| 2 | Azure Arabic Egypt Neural TTS | `ar-EG-SalmaNeural` | Microsoft's Egyptian Arabic female neural voice via the Speech REST endpoint. |
+| 3 | Groq Orpheus Arabic TTS | `canopylabs/orpheus-arabic-saudi` / `noura` | WAV only, 200 chars per request. The app splits long text and merges chunks with ffmpeg. Voices: noura, lulwa, aisha, abdullah, fahad, sultan. |
+| 4 | OpenAI TTS | `gpt-4o-mini-tts` / `alloy` | MP3 output. |
+| 5 | Windows TTS fallback | SAPI5 via `pyttsx3` | Offline, robotic, Windows only. Shown with a warning. |
 
-The first provider whose credentials are present is selected by default. You can
+The first provider whose credentials are present is selected by default.
+
+### Egyptian female voice and voice cloning (Voice lab tab)
+
+* **Natural Egyptian female voice**: with `ELEVENLABS_API_KEY` set, add an Arabic female
+  voice to your ElevenLabs library (Voice Library → Arabic) and pick it in Step 2. The
+  "Delivery" panel tunes softness, closeness, expressiveness and pace. Azure's
+  `ar-EG-SalmaNeural` is the no-setup Egyptian alternative.
+* **Cloning**: upload 1–3 minutes of clean speech from one speaker, tick the consent
+  confirmation, and the clone appears in Step 2 (marked ★). Instant cloning gets close
+  to the speaker, not identical. For an authentic Egyptian accent, clone an Egyptian
+  speaker. Consent is recorded in the local database for every clone, and all output
+  keeps the "Generated AI voice audio." label. Do not clone anyone without their
+  permission. You can
 pick any provider in the UI; missing keys produce a clear setup message that never
 shows secret values.
 
@@ -66,6 +80,7 @@ the keys file win over `.env`.
 was ever displayed anywhere, revoke it and create a new one.
 
 ```env
+ELEVENLABS_API_KEY=
 ANTHROPIC_API_KEY=
 GROQ_API_KEY=
 OPENAI_API_KEY=
@@ -75,7 +90,7 @@ WHATSAPP_ACCESS_TOKEN=
 ```
 
 Optional values stay blank unless you want to override the defaults:
-`TEXT_ENGINE`, `GROQ_TEXT_MODEL`, `CLAUDE_MODEL`, `CLAUDE_EFFORT`, `GROQ_TTS_MODEL`, `GROQ_TTS_VOICE`, `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE`,
+`ELEVENLABS_MODEL`, `ELEVENLABS_VOICE_ID`, `TEXT_ENGINE`, `GROQ_TEXT_MODEL`, `CLAUDE_MODEL`, `CLAUDE_EFFORT`, `GROQ_TTS_MODEL`, `GROQ_TTS_VOICE`, `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE`,
 `AZURE_SPEECH_VOICE`, `WHATSAPP_API_VERSION`, `LOCKED_RECIPIENT_NUMBER`,
 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`.
 

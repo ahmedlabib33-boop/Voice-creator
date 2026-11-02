@@ -34,6 +34,16 @@ CREATE TABLE IF NOT EXISTS authorized_senders (
     waba_id TEXT,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS voice_clones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    voice_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    sample_count INTEGER NOT NULL,
+    consent_text TEXT NOT NULL,
+    consent_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS send_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     recipient_e164 TEXT NOT NULL,
@@ -186,6 +196,37 @@ class Database:
     def delete_authorized_sender(self, sender_id: int) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM authorized_senders WHERE id = ?", (sender_id,))
+
+    # --- voice clones (consent records) --------------------------------------------
+
+    def add_voice_clone(self, provider: str, voice_id: str, name: str, sample_count: int, consent_text: str) -> None:
+        if not consent_text.strip():
+            raise ValueError("Consent confirmation is required before cloning a voice.")
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO voice_clones (provider, voice_id, name, sample_count, consent_text, consent_at, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(voice_id) DO UPDATE SET name = excluded.name, sample_count = excluded.sample_count",
+                (provider, voice_id, name.strip(), int(sample_count), consent_text.strip(), _now(), _now()),
+            )
+
+    def list_voice_clones(self, provider: str | None = None) -> list[dict]:
+        with self.connect() as conn:
+            if provider:
+                rows = conn.execute(
+                    "SELECT id, provider, voice_id, name, sample_count, consent_at, created_at FROM voice_clones "
+                    "WHERE provider = ? ORDER BY created_at DESC", (provider,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, provider, voice_id, name, sample_count, consent_at, created_at FROM voice_clones "
+                    "ORDER BY created_at DESC"
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_voice_clone(self, voice_id: str) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM voice_clones WHERE voice_id = ?", (voice_id,))
 
     # --- send log --------------------------------------------------------------
 

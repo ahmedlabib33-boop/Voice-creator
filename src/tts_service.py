@@ -24,13 +24,14 @@ from pathlib import Path
 
 import requests
 
-from . import config
+from . import config, elevenlabs_service
 
+PROVIDER_ELEVENLABS = "ElevenLabs natural voice (clone-capable)"
 PROVIDER_GROQ = "Groq Orpheus Arabic TTS"
 PROVIDER_OPENAI = "OpenAI TTS"
 PROVIDER_AZURE = "Azure Arabic Egypt Neural TTS"
 PROVIDER_WINDOWS = "Windows TTS fallback"
-PROVIDER_ORDER = [PROVIDER_GROQ, PROVIDER_OPENAI, PROVIDER_AZURE, PROVIDER_WINDOWS]
+PROVIDER_ORDER = [PROVIDER_ELEVENLABS, PROVIDER_AZURE, PROVIDER_GROQ, PROVIDER_OPENAI, PROVIDER_WINDOWS]
 
 GROQ_MAX_CHARS = 200
 OPENAI_MAX_CHARS = 4000
@@ -64,6 +65,13 @@ def provider_statuses() -> list[ProviderStatus]:
 
     statuses.append(
         ProviderStatus(
+            PROVIDER_ELEVENLABS,
+            elevenlabs_service.available(),
+            "Ready: natural voices, Egyptian female voice, cloning." if elevenlabs_service.available() else "Missing ELEVENLABS_API_KEY.",
+        )
+    )
+    statuses.append(
+        ProviderStatus(
             PROVIDER_GROQ,
             bool(config.groq_api_key()),
             "Ready." if config.groq_api_key() else "Missing GROQ_API_KEY in .env or Streamlit secrets.",
@@ -81,7 +89,7 @@ def provider_statuses() -> list[ProviderStatus]:
         ProviderStatus(
             PROVIDER_AZURE,
             not azure_missing,
-            "Ready." if not azure_missing else "Missing " + " and ".join(azure_missing) + ".",
+            "Ready: Egyptian Arabic neural voice (ar-EG-SalmaNeural)." if not azure_missing else "Missing " + " and ".join(azure_missing) + ".",
         )
     )
     win_ready = sys.platform == "win32" and _pyttsx3_available()
@@ -93,6 +101,8 @@ def provider_statuses() -> list[ProviderStatus]:
             warning="Fallback only: robotic Windows voice, not a natural Egyptian accent.",
         )
     )
+    order = {name: i for i, name in enumerate(PROVIDER_ORDER)}
+    statuses.sort(key=lambda st: order.get(st.name, 99))
     return statuses
 
 
@@ -100,7 +110,7 @@ def default_provider() -> str:
     for status in provider_statuses():
         if status.ready:
             return status.name
-    return PROVIDER_GROQ
+    return PROVIDER_ELEVENLABS
 
 
 def _pyttsx3_available() -> bool:
@@ -210,13 +220,14 @@ def new_output_path(output_dir: Path | None = None) -> Path:
 
 # --- providers -------------------------------------------------------------------
 
-def generate_speech(text: str, provider: str, voice: str | None = None, output_dir: Path | None = None) -> Path:
+def generate_speech(text: str, provider: str, voice: str | None = None, output_dir: Path | None = None, options: dict | None = None) -> Path:
     """Generate an MP3 for ``text`` using ``provider``. Returns the MP3 path."""
     text = (text or "").strip()
     if not text:
         raise ValueError("Enter some text to convert to speech.")
     output = new_output_path(output_dir)
     generators = {
+        PROVIDER_ELEVENLABS: _generate_elevenlabs,
         PROVIDER_GROQ: _generate_groq,
         PROVIDER_OPENAI: _generate_openai,
         PROVIDER_AZURE: _generate_azure,
@@ -224,7 +235,31 @@ def generate_speech(text: str, provider: str, voice: str | None = None, output_d
     }
     if provider not in generators:
         raise ValueError(f"Unknown provider: {provider}")
+    if provider == PROVIDER_ELEVENLABS:
+        return _generate_elevenlabs(text, voice or "", output, options or {})
     return generators[provider](text, voice or "", output)
+
+
+def _generate_elevenlabs(text: str, voice: str, output: Path, options: dict) -> Path:
+    if not elevenlabs_service.available():
+        raise TTSSetupError("ELEVENLABS_API_KEY is missing. Add it to the keys file, .env or Streamlit secrets.")
+    voice_id = voice or config.elevenlabs_voice_id()
+    chunks = split_text(text, elevenlabs_service.MAX_CHARS)
+    try:
+        settings = options.get("settings")
+        model_id = options.get("model_id")
+        if len(chunks) == 1:
+            return elevenlabs_service.synthesize(chunks[0], voice_id, output, settings, model_id)
+        with tempfile.TemporaryDirectory() as tmp:
+            parts = [
+                elevenlabs_service.synthesize(c, voice_id, Path(tmp) / f"part_{i:03d}.mp3", settings, model_id)
+                for i, c in enumerate(chunks)
+            ]
+            return merge_to_mp3(parts, output)
+    except elevenlabs_service.ElevenLabsSetupError as exc:
+        raise TTSSetupError(str(exc)) from exc
+    except elevenlabs_service.ElevenLabsError as exc:
+        raise TTSGenerationError(str(exc)) from exc
 
 
 def _generate_groq(text: str, voice: str, output: Path) -> Path:
