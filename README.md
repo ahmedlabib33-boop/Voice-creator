@@ -4,6 +4,21 @@ A Streamlit app that turns Egyptian Arabic text into an MP3 voice note and sends
 through the **official WhatsApp Cloud API**. Every generated file is labelled
 "Generated AI voice audio."
 
+## Claude is the primary AI
+
+Claude (Anthropic API) writes and refines the message text:
+
+* **Write with Claude**: type a short brief in any language and Claude drafts a natural
+  Egyptian Arabic voice-note script.
+* **Refine with Claude**: rewrite existing text into Egyptian dialect without changing
+  the meaning.
+
+Defaults: model `claude-opus-5-5`, effort `medium`, server-side refusal fallback
+enabled. Override with `CLAUDE_MODEL` / `CLAUDE_EFFORT` in `.env`. The Claude API does
+not produce audio, so the voice itself still comes from one of the TTS providers below.
+A local Ollama server is an optional fallback for refinement only, used when no
+`ANTHROPIC_API_KEY` is set.
+
 ## Voice providers (in order of preference)
 
 | # | Provider | Default model / voice | Notes |
@@ -32,6 +47,7 @@ Copy `.env.example` to `.env` in the project folder and fill in the values you h
 was ever displayed anywhere, revoke it and create a new one.
 
 ```env
+ANTHROPIC_API_KEY=
 GROQ_API_KEY=
 OPENAI_API_KEY=
 AZURE_SPEECH_KEY=
@@ -40,7 +56,7 @@ WHATSAPP_ACCESS_TOKEN=
 ```
 
 Optional values stay blank unless you want to override the defaults:
-`GROQ_TTS_MODEL`, `GROQ_TTS_VOICE`, `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE`,
+`CLAUDE_MODEL`, `CLAUDE_EFFORT`, `GROQ_TTS_MODEL`, `GROQ_TTS_VOICE`, `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE`,
 `AZURE_SPEECH_VOICE`, `WHATSAPP_API_VERSION`, `LOCKED_RECIPIENT_NUMBER`,
 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`.
 
@@ -52,11 +68,11 @@ Save the key without echoing it in PowerShell:
 
 ```powershell
 cd path\to\Voice-creator
-$secure = Read-Host "Paste Groq key" -AsSecureString
+$secure = Read-Host "Paste Anthropic key" -AsSecureString
 $key = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
-$lines = Get-Content .env | Where-Object { $_ -notmatch "^GROQ_API_KEY=" }
-@("GROQ_API_KEY=$key") + $lines | Set-Content .env -Encoding UTF8
+$lines = Get-Content .env | Where-Object { $_ -notmatch "^ANTHROPIC_API_KEY=" }
+@("ANTHROPIC_API_KEY=$key") + $lines | Set-Content .env -Encoding UTF8
 $key = $null; $secure = $null
 ```
 
@@ -111,5 +127,5 @@ is what the UI displays and what the WhatsApp API receives as the recipient.
 python -m unittest discover -s tests -v
 ```
 
-The suite covers number normalization, database migration, text chunking and a
-mocked Groq run that merges chunks into an MP3 through ffmpeg.
+The suite covers number normalization, database migration, text chunking, a mocked
+Claude call (model, fallback header, refusal handling, Ollama fallback) and a mocked Groq run that merges chunks into an MP3 through ffmpeg.

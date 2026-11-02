@@ -23,6 +23,8 @@ DB_PATH = DATA_DIR / "voice_app.db"
 AI_DISCLOSURE = "Generated AI voice audio."
 
 DEFAULTS = {
+    "CLAUDE_MODEL": "claude-opus-5-5",
+    "CLAUDE_EFFORT": "medium",
     "GROQ_TTS_MODEL": "canopylabs/orpheus-arabic-saudi",
     "GROQ_TTS_VOICE": "noura",
     "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
@@ -78,6 +80,21 @@ def get_setting(name: str, default: str = "") -> str:
 
 def has_setting(name: str) -> bool:
     return bool(_clean(os.environ.get(name)) or _clean(_streamlit_secret(name)))
+
+
+# --- Claude (primary AI: writes and refines the message text) --------------
+
+def anthropic_api_key() -> str:
+    return get_setting("ANTHROPIC_API_KEY")
+
+
+def claude_model() -> str:
+    return get_setting("CLAUDE_MODEL")
+
+
+def claude_effort() -> str:
+    effort = get_setting("CLAUDE_EFFORT").lower()
+    return effort if effort in ("low", "medium", "high", "xhigh", "max") else "medium"
 
 
 # --- Voice providers -------------------------------------------------------
@@ -150,6 +167,7 @@ def credential_status() -> dict[str, bool]:
     return {
         name: has_setting(name)
         for name in (
+            "ANTHROPIC_API_KEY",
             "GROQ_API_KEY",
             "OPENAI_API_KEY",
             "AZURE_SPEECH_KEY",

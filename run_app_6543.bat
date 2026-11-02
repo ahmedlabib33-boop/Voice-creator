@@ -7,7 +7,7 @@ where python >nul 2>nul || (
     pause & exit /b 1
 )
 
-python -c "import streamlit, groq, openai, dotenv, requests" >nul 2>nul || (
+python -c "import streamlit, anthropic, groq, openai, dotenv, requests" >nul 2>nul || (
     echo Installing dependencies...
     python -m pip install -r requirements.txt || (pause & exit /b 1)
 )

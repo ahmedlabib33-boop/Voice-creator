@@ -12,7 +12,7 @@ import streamlit as st
 
 from src import config
 from src.database import Database
-from src.text_refiner import RefineError, ollama_available, refine_to_egyptian
+from src.text_refiner import ENGINE_CLAUDE, RefineError, active_engine, refine_to_egyptian, write_message
 from src.tts_service import (
     GROQ_ARABIC_VOICES,
     PROVIDER_GROQ,
@@ -51,6 +51,15 @@ with st.sidebar:
     for name, present in config.credential_status().items():
         st.write(("✅ " if present else "❌ ") + f"`{name}`")
     st.divider()
+    st.subheader("Text engine (primary AI)")
+    engine = active_engine()
+    if engine == ENGINE_CLAUDE:
+        st.write(f"✅ **Claude** — model `{config.claude_model()}`")
+    elif engine:
+        st.write(f"⚠️ **{engine}** — add `ANTHROPIC_API_KEY` to use Claude.")
+    else:
+        st.write("❌ No text engine. Add `ANTHROPIC_API_KEY` to .env or Streamlit secrets.")
+    st.divider()
     st.subheader("Voice providers")
     for status in provider_statuses():
         st.write(("✅ " if status.ready else "⚠️ ") + f"**{status.name}** — {status.message}")
@@ -71,23 +80,44 @@ with tab_generate:
     col_text, col_opts = st.columns([3, 2])
 
     with col_text:
+        with st.expander("Write with Claude from a short brief", expanded=not st.session_state.get("message_text")):
+            brief = st.text_area(
+                "What should the voice note say? (any language)",
+                height=90,
+                key="brief_text",
+                placeholder="مثال: فكّر أحمد إن الاجتماع بكرة الساعة 5 ولازم يجيب العقد معاه",
+            )
+            if st.button("Write with Claude", disabled=not brief.strip()):
+                with st.spinner("Claude is writing..."):
+                    try:
+                        drafted, engine_used = write_message(brief)
+                        st.session_state["message_text"] = drafted
+                        st.session_state.pop("refined_text", None)
+                        st.rerun()
+                    except RefineError as exc:
+                        st.error(str(exc))
+
         text = st.text_area(
             "Message text (Egyptian Arabic)",
-            value=st.session_state.get("message_text", ""),
             height=180,
             key="message_text",
             placeholder="اكتب الرسالة هنا...",
         )
-        if st.button("Refine into Egyptian dialect (Ollama)", disabled=not text.strip()):
-            if not ollama_available():
-                st.warning(f"Ollama is not reachable at {config.ollama_base_url()}. Skipping refinement.")
-            else:
+        engine = active_engine()
+        refine_label = "Refine into Egyptian dialect with Claude" if engine == ENGINE_CLAUDE else f"Refine into Egyptian dialect ({engine or 'no engine configured'})"
+        if st.button(refine_label, disabled=not (text.strip() and engine)):
+            with st.spinner("Refining..."):
                 try:
-                    st.session_state["refined_text"] = refine_to_egyptian(text)
+                    refined, engine_used = refine_to_egyptian(text)
+                    st.session_state["refined_text"] = refined
+                    st.session_state["refined_engine"] = engine_used
                 except RefineError as exc:
                     st.error(str(exc))
         if st.session_state.get("refined_text"):
-            st.text_area("Refined text", value=st.session_state["refined_text"], height=120, key="refined_view")
+            st.text_area(
+                f"Refined by {st.session_state.get('refined_engine', '')}",
+                value=st.session_state["refined_text"], height=120, key="refined_view",
+            )
             if st.button("Use refined text"):
                 st.session_state["message_text"] = st.session_state["refined_text"]
                 st.session_state.pop("refined_text", None)
