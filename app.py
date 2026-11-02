@@ -416,7 +416,7 @@ with tab_voicelab:
                             dest.write_bytes(up.getbuffer())
                             paths.append(dest)
                         if use_local:
-                            info = local_clone_service.prepare_clone(clone_name, paths)
+                            info = local_clone_service.prepare_clone(clone_name, paths, license_ok=license_ok)
                             db.add_voice_clone("local_xtts", info["voice_id"], clone_name, len(paths),
                                                elevenlabs_service.CONSENT_TEXT + " | " + local_clone_service.LICENSE_TEXT)
                             st.success(f"Clone “{clone_name}” is ready. In Step 2 choose “{PROVIDER_LOCAL_CLONE}”.")

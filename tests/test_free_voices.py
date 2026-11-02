@@ -59,7 +59,10 @@ class LocalCloneTests(unittest.TestCase):
         return p
 
     def test_prepare_clone_normalizes_and_lists(self):
-        info = local_clone_service.prepare_clone("Mona Test", [self._make_sample()])
+        with self.assertRaises(local_clone_service.LocalCloneSetupError):
+            local_clone_service.prepare_clone("Mona Test", [self._make_sample()])  # license not accepted yet
+        info = local_clone_service.prepare_clone("Mona Test", [self._make_sample()], license_ok=True)
+        self.assertTrue(local_clone_service.license_accepted())
         self.assertEqual(info["voice_id"], "mona-test")
         self.assertEqual(len(info["samples"]), 1)
         import wave
@@ -71,12 +74,12 @@ class LocalCloneTests(unittest.TestCase):
 
     def test_prepare_requires_name_and_samples(self):
         with self.assertRaises(ValueError):
-            local_clone_service.prepare_clone("", [self._make_sample()])
+            local_clone_service.prepare_clone("", [self._make_sample()], license_ok=True)
         with self.assertRaises(ValueError):
-            local_clone_service.prepare_clone("x", [])
+            local_clone_service.prepare_clone("x", [], license_ok=True)
 
     def test_synthesize_calls_xtts_with_arabic_and_samples(self):
-        local_clone_service.prepare_clone("Mona", [self._make_sample()])
+        local_clone_service.prepare_clone("Mona", [self._make_sample()], license_ok=True)
         seen = {}
 
         class FakeModel:
@@ -88,6 +91,11 @@ class LocalCloneTests(unittest.TestCase):
         self.assertTrue(out.exists())
         self.assertEqual(seen["language"], "ar")
         self.assertEqual(len(seen["speaker_wav"]), 1)
+
+    def test_model_load_refuses_without_license(self):
+        with mock.patch.object(local_clone_service, "available", return_value=True):
+            with self.assertRaises(local_clone_service.LocalCloneSetupError):
+                local_clone_service._load_model()
 
     def test_unknown_clone_is_setup_error(self):
         with self.assertRaises(local_clone_service.LocalCloneSetupError):

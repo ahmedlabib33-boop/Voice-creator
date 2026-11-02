@@ -25,6 +25,7 @@ LICENSE_TEXT = (
     "I accept the Coqui Public Model License (non-commercial use) for the XTTS v2 model "
     "that will be downloaded to this computer."
 )
+LICENSE_MARKER = "LICENSE_ACCEPTED"  # written only when the user ticks the license box
 MAX_SAMPLE_SECONDS = 60
 MAX_CHARS = 220  # XTTS works best on short sentences; the TTS layer chunks and merges
 
@@ -78,10 +79,24 @@ def list_clones() -> list[dict]:
     return out
 
 
-def prepare_clone(name: str, sample_paths: list[Path]) -> dict:
+def license_accepted() -> bool:
+    return (VOICES_DIR / LICENSE_MARKER).exists()
+
+
+def record_license_acceptance() -> None:
+    """Called by the UI after the user ticks the XTTS license checkbox."""
+    VOICES_DIR.mkdir(parents=True, exist_ok=True)
+    (VOICES_DIR / LICENSE_MARKER).write_text(LICENSE_TEXT, encoding="utf-8")
+
+
+def prepare_clone(name: str, sample_paths: list[Path], license_ok: bool = False) -> dict:
     """Normalize uploaded samples to 22.05 kHz mono WAV (first 60 s) and store them."""
     if not sample_paths:
         raise ValueError("Upload at least one audio sample.")
+    if not license_ok and not license_accepted():
+        raise LocalCloneSetupError("Accept the XTTS model license in the Voice lab before cloning.")
+    if license_ok:
+        record_license_acceptance()
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise LocalCloneSetupError("ffmpeg was not found on PATH. Install it: winget install Gyan.FFmpeg")
@@ -116,7 +131,9 @@ def _load_model():
         return _model
     if not available():
         raise LocalCloneSetupError(install_hint())
-    os.environ.setdefault("COQUI_TOS_AGREED", "1")  # the UI records license acceptance before this runs
+    if not license_accepted():
+        raise LocalCloneSetupError("Accept the XTTS model license in the Voice lab before generating.")
+    os.environ["COQUI_TOS_AGREED"] = "1"  # the user accepted it in the UI; this suppresses the CLI prompt
     from TTS.api import TTS
 
     try:
