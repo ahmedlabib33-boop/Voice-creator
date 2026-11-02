@@ -140,6 +140,14 @@ is what the UI displays and what the WhatsApp API receives as the recipient.
 * "Validate with Meta" checks the token and `phone_number_id` without sending.
   "Send test text" confirms delivery before uploading audio.
 
+## Design system
+
+The UI follows a documented design system: tokens, components, states and
+accessibility rules are in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). Styling lives in
+`src/ui_theme.py` (CSS custom properties + helpers such as `hero`, `step`, `chips`,
+`kpis`) and the base theme in `.streamlit/config.toml`. The Studio tab is a
+three-step flow: write, generate voice, send.
+
 ## Tests
 
 ```bash
