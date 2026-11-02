@@ -1,6 +1,7 @@
 # Optional: free local voice cloning (Coqui XTTS v2). Python 3.10 - 3.14.
 # Install once:  pip install -r requirements-clone.txt
 # First use downloads the model (~2 GB). CPU works but is slow; CUDA GPU is fast.
-coqui-tts>=0.27
+coqui-tts[codec]>=0.27
 torch>=2.2
 torchaudio>=2.2
+six>=1.16
