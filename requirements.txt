@@ -1,0 +1,6 @@
+streamlit>=1.38
+python-dotenv>=1.0
+requests>=2.31
+groq>=0.11
+openai>=1.40
+pyttsx3>=2.90; sys_platform == "win32"

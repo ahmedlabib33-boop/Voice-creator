@@ -1,0 +1,19 @@
+# Secrets: never commit real keys
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Runtime output
+generated_audio/
+data/
+*.db
+*.wav
+*.mp3
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/

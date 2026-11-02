@@ -1,0 +1,1 @@
+"""Egyptian voice sender package."""
