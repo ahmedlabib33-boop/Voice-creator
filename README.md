@@ -4,20 +4,26 @@ A Streamlit app that turns Egyptian Arabic text into an MP3 voice note and sends
 through the **official WhatsApp Cloud API**. Every generated file is labelled
 "Generated AI voice audio."
 
-## Claude is the primary AI
+## AI text engine: Groq (default) or Claude
 
-Claude (Anthropic API) writes and refines the message text:
+The sidebar has an **AI text engine** switch. It controls who writes and refines the
+message text:
 
-* **Write with Claude**: type a short brief in any language and Claude drafts a natural
+| Engine | Default model | Needs |
+|--------|---------------|-------|
+| Groq (default) | `llama-3.3-70b-versatile` | `GROQ_API_KEY` (same key as Groq voice) |
+| Claude | `claude-opus-5-5` | `ANTHROPIC_API_KEY` |
+| Ollama (local) | `llama3.1` | a running Ollama server; refine only |
+
+* **Write with …**: type a short brief in any language and the engine drafts a natural
   Egyptian Arabic voice-note script.
-* **Refine with Claude**: rewrite existing text into Egyptian dialect without changing
-  the meaning.
+* **Refine with …**: rewrite existing text into Egyptian dialect without changing the
+  meaning.
 
-Defaults: model `claude-opus-5-5`, effort `medium`, server-side refusal fallback
-enabled. Override with `CLAUDE_MODEL` / `CLAUDE_EFFORT` in `.env`. The Claude API does
-not produce audio, so the voice itself still comes from one of the TTS providers below.
-A local Ollama server is an optional fallback for refinement only, used when no
-`ANTHROPIC_API_KEY` is set.
+Change the default with `TEXT_ENGINE=claude` and the models with `GROQ_TEXT_MODEL`,
+`CLAUDE_MODEL` / `CLAUDE_EFFORT`. Claude runs with adaptive thinking and server-side
+refusal fallback. Neither engine produces audio; the voice comes from the TTS
+providers below.
 
 ## Voice providers (in order of preference)
 
@@ -69,7 +75,7 @@ WHATSAPP_ACCESS_TOKEN=
 ```
 
 Optional values stay blank unless you want to override the defaults:
-`CLAUDE_MODEL`, `CLAUDE_EFFORT`, `GROQ_TTS_MODEL`, `GROQ_TTS_VOICE`, `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE`,
+`TEXT_ENGINE`, `GROQ_TEXT_MODEL`, `CLAUDE_MODEL`, `CLAUDE_EFFORT`, `GROQ_TTS_MODEL`, `GROQ_TTS_VOICE`, `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE`,
 `AZURE_SPEECH_VOICE`, `WHATSAPP_API_VERSION`, `LOCKED_RECIPIENT_NUMBER`,
 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`.
 

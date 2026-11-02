@@ -53,23 +53,20 @@ class ClaudeTests(unittest.TestCase):
             with self.assertRaises(claude_service.ClaudeError):
                 claude_service.write_message("brief")
 
-    def test_refiner_prefers_claude(self):
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "k"}), mock.patch.object(claude_service, "refine_to_egyptian", return_value="x") as m:
-            text, engine = text_refiner.refine_to_egyptian("y")
+    def test_refiner_claude_engine(self):
+        with mock.patch.object(claude_service, "refine_to_egyptian", return_value="x") as m:
+            text, engine = text_refiner.refine_to_egyptian("y", text_refiner.ENGINE_CLAUDE)
         self.assertEqual((text, engine), ("x", text_refiner.ENGINE_CLAUDE))
         m.assert_called_once()
 
-    def test_refiner_falls_back_to_ollama(self):
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}), mock.patch.object(config, "_streamlit_secret", return_value=None), \
-             mock.patch.object(text_refiner, "ollama_available", return_value=True), \
-             mock.patch.object(text_refiner, "_ollama_refine", return_value="z"):
-            self.assertEqual(text_refiner.refine_to_egyptian("y"), ("z", text_refiner.ENGINE_OLLAMA))
+    def test_refiner_ollama_engine(self):
+        with mock.patch.object(text_refiner, "_ollama_refine", return_value="z"):
+            self.assertEqual(text_refiner.refine_to_egyptian("y", text_refiner.ENGINE_OLLAMA), ("z", text_refiner.ENGINE_OLLAMA))
 
-    def test_no_engine_message(self):
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}), mock.patch.object(config, "_streamlit_secret", return_value=None), \
-             mock.patch.object(text_refiner, "ollama_available", return_value=False):
+    def test_claude_missing_key_surfaces_as_refine_error(self):
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}), mock.patch.object(config, "_streamlit_secret", return_value=None):
             with self.assertRaises(text_refiner.RefineError):
-                text_refiner.refine_to_egyptian("y")
+                text_refiner.refine_to_egyptian("y", text_refiner.ENGINE_CLAUDE)
 
 
 if __name__ == "__main__":

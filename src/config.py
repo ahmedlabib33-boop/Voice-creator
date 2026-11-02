@@ -27,6 +27,8 @@ DB_PATH = DATA_DIR / "voice_app.db"
 AI_DISCLOSURE = "Generated AI voice audio."
 
 DEFAULTS = {
+    "TEXT_ENGINE": "groq",
+    "GROQ_TEXT_MODEL": "llama-3.3-70b-versatile",
     "CLAUDE_MODEL": "claude-opus-5-5",
     "CLAUDE_EFFORT": "medium",
     "GROQ_TTS_MODEL": "canopylabs/orpheus-arabic-saudi",
@@ -171,7 +173,17 @@ def has_setting(name: str) -> bool:
     return bool(_clean(os.environ.get(name)) or _clean(_streamlit_secret(name)))
 
 
-# --- Claude (primary AI: writes and refines the message text) --------------
+# --- Text engine selection (Groq default, Claude optional) --------------------
+
+def text_engine() -> str:
+    return get_setting("TEXT_ENGINE")
+
+
+def groq_text_model() -> str:
+    return get_setting("GROQ_TEXT_MODEL")
+
+
+# --- Claude (optional AI for writing and refining the message text) -----------
 
 def anthropic_api_key() -> str:
     return get_setting("ANTHROPIC_API_KEY")

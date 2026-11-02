@@ -12,7 +12,7 @@ import streamlit as st
 
 from src import config
 from src.database import Database
-from src.text_refiner import ENGINE_CLAUDE, RefineError, active_engine, refine_to_egyptian, write_message
+from src.text_refiner import ENGINE_OLLAMA, ENGINE_ORDER, RefineError, default_engine, engine_ready, ollama_available, refine_to_egyptian, write_message
 from src.tts_service import (
     GROQ_ARABIC_VOICES,
     PROVIDER_GROQ,
@@ -53,14 +53,18 @@ with st.sidebar:
     for name, present in config.credential_status().items():
         st.write(("✅ " if present else "❌ ") + f"`{name}`")
     st.divider()
-    st.subheader("Text engine (primary AI)")
-    engine = active_engine()
-    if engine == ENGINE_CLAUDE:
-        st.write(f"✅ **Claude** — model `{config.claude_model()}`")
-    elif engine:
-        st.write(f"⚠️ **{engine}** — add `ANTHROPIC_API_KEY` to use Claude.")
-    else:
-        st.write("❌ No text engine. Add `ANTHROPIC_API_KEY` to .env or Streamlit secrets.")
+    st.subheader("AI text engine")
+    engine_options = [e for e in ENGINE_ORDER if e != ENGINE_OLLAMA or ollama_available()]
+    preferred = default_engine()
+    text_engine = st.radio(
+        "Writes and refines the message",
+        engine_options,
+        index=engine_options.index(preferred) if preferred in engine_options else 0,
+        key="text_engine",
+        help="Groq is the default. Claude is available when ANTHROPIC_API_KEY is set.",
+    )
+    ready, message = engine_ready(text_engine)
+    st.write(("✅ " if ready else "⚠️ ") + message)
     st.divider()
     st.subheader("Voice providers")
     for status in provider_statuses():
@@ -82,17 +86,17 @@ with tab_generate:
     col_text, col_opts = st.columns([3, 2])
 
     with col_text:
-        with st.expander("Write with Claude from a short brief", expanded=not st.session_state.get("message_text")):
+        with st.expander(f"Write with {text_engine} from a short brief", expanded=not st.session_state.get("message_text")):
             brief = st.text_area(
                 "What should the voice note say? (any language)",
                 height=90,
                 key="brief_text",
                 placeholder="مثال: فكّر أحمد إن الاجتماع بكرة الساعة 5 ولازم يجيب العقد معاه",
             )
-            if st.button("Write with Claude", disabled=not brief.strip()):
-                with st.spinner("Claude is writing..."):
+            if st.button(f"Write with {text_engine}", disabled=not (brief.strip() and ready)):
+                with st.spinner(f"{text_engine} is writing..."):
                     try:
-                        drafted, engine_used = write_message(brief)
+                        drafted, engine_used = write_message(brief, text_engine)
                         st.session_state["message_text"] = drafted
                         st.session_state.pop("refined_text", None)
                         st.rerun()
@@ -105,12 +109,10 @@ with tab_generate:
             key="message_text",
             placeholder="اكتب الرسالة هنا...",
         )
-        engine = active_engine()
-        refine_label = "Refine into Egyptian dialect with Claude" if engine == ENGINE_CLAUDE else f"Refine into Egyptian dialect ({engine or 'no engine configured'})"
-        if st.button(refine_label, disabled=not (text.strip() and engine)):
-            with st.spinner("Refining..."):
+        if st.button(f"Refine into Egyptian dialect with {text_engine}", disabled=not (text.strip() and ready)):
+            with st.spinner(f"{text_engine} is refining..."):
                 try:
-                    refined, engine_used = refine_to_egyptian(text)
+                    refined, engine_used = refine_to_egyptian(text, text_engine)
                     st.session_state["refined_text"] = refined
                     st.session_state["refined_engine"] = engine_used
                 except RefineError as exc:

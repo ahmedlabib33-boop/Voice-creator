@@ -1,10 +1,10 @@
 # Paste your keys after the = sign. No quotes, no spaces.
 # Save this file as keys.txt in the same folder (keys.txt is ignored by git).
-# Claude (primary AI - writes and refines the message)
-ANTHROPIC_API_KEY=
-
-# Groq (voice generation)
+# Groq (default AI for text + voice generation)
 GROQ_API_KEY=
+
+# Claude (optional AI for text, pick it in the sidebar)
+ANTHROPIC_API_KEY=
 
 # Optional
 OPENAI_API_KEY=
