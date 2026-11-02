@@ -1,0 +1,13 @@
+# Paste your keys after the = sign. No quotes, no spaces.
+# Save this file as keys.txt in the same folder (keys.txt is ignored by git).
+# Claude (primary AI - writes and refines the message)
+ANTHROPIC_API_KEY=
+
+# Groq (voice generation)
+GROQ_API_KEY=
+
+# Optional
+OPENAI_API_KEY=
+AZURE_SPEECH_KEY=
+AZURE_SPEECH_REGION=
+WHATSAPP_ACCESS_TOKEN=

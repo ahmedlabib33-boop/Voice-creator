@@ -3,8 +3,10 @@
 Values are read, in order, from:
 1. A local ``.env`` file next to ``app.py`` (wins over the process environment,
    so a stale empty variable in the shell cannot hide a key saved in the file).
-2. The process environment.
-3. Streamlit secrets (``.streamlit/secrets.toml``) when running under Streamlit.
+2. A local ``keys.txt`` next to ``app.py`` (plain KEY=value lines; non-blank
+   values override ``.env``).
+3. The process environment.
+4. Streamlit secrets (``.streamlit/secrets.toml``) when running under Streamlit.
 
 Secret values are never logged or displayed; only presence is reported.
 """
@@ -16,6 +18,7 @@ from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent.parent
 ENV_PATH = APP_DIR / ".env"
+KEYS_PATH = APP_DIR / "keys.txt"
 GENERATED_AUDIO_DIR = APP_DIR / "generated_audio"
 DATA_DIR = APP_DIR / "data"
 DB_PATH = DATA_DIR / "voice_app.db"
@@ -49,7 +52,38 @@ def load_env_file() -> bool:
     return True
 
 
+def load_keys_file(path: Path = KEYS_PATH) -> int:
+    """Load ``keys.txt`` (KEY=value lines) into the environment.
+
+    A plain text file for people who prefer Notepad over a dotfile. Only
+    non-blank values are applied, so an empty line never wipes a key that
+    ``.env`` already set. Returns the number of keys applied.
+    """
+    if not path.exists():
+        return 0
+    applied = 0
+    for raw in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip().upper()
+        value = _clean(value)
+        if key and value:
+            os.environ[key] = value
+            applied += 1
+    return applied
+
+
+def _clean(value) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip().strip('"').strip("'").strip()
+    return text
+
+
 load_env_file()
+load_keys_file()
 
 
 def _streamlit_secret(name: str):
@@ -59,13 +93,6 @@ def _streamlit_secret(name: str):
         return st.secrets.get(name)  # type: ignore[union-attr]
     except Exception:  # no secrets file, or not running under Streamlit
         return None
-
-
-def _clean(value) -> str:
-    if value is None:
-        return ""
-    text = str(value).strip().strip('"').strip("'").strip()
-    return text
 
 
 def get_setting(name: str, default: str = "") -> str:

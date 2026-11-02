@@ -42,7 +42,16 @@ python -m pip install -r requirements.txt
 
 ### Where to paste your keys
 
-Copy `.env.example` to `.env` in the project folder and fill in the values you have.
+Easiest: open `keys.txt` in Notepad (the launcher creates it from `keys.example.txt`
+on first run and opens it for you) and paste the keys after the `=` signs:
+
+```text
+ANTHROPIC_API_KEY=
+GROQ_API_KEY=
+```
+
+`keys.txt` is ignored by git. The same names also work in `.env` (copy
+`.env.example` to `.env`); non-blank values in `keys.txt` win over `.env`.
 `.env` is ignored by git. Never paste keys into chat, screenshots, or commits. If a key
 was ever displayed anywhere, revoke it and create a new one.
 

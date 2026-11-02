@@ -14,9 +14,12 @@ python -c "import streamlit, anthropic, groq, openai, dotenv, requests" >nul 2>n
 
 where ffmpeg >nul 2>nul || echo WARNING: ffmpeg not found on PATH. Install it: winget install Gyan.FFmpeg
 
-if not exist ".env" (
-    echo No .env found. Copying .env.example to .env - paste your real keys into it.
-    copy /y ".env.example" ".env" >nul
+if not exist ".env" copy /y ".env.example" ".env" >nul
+
+if not exist "keys.txt" (
+    copy /y "keys.example.txt" "keys.txt" >nul
+    echo Created keys.txt - paste your Claude and Groq keys into it, save, then close Notepad.
+    notepad "keys.txt"
 )
 
 echo Starting on http://127.0.0.1:6543

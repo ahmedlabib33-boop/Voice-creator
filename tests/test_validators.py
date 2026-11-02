@@ -45,3 +45,19 @@ class NormalizeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KeysFileTests(unittest.TestCase):
+    def test_keys_txt_applies_only_non_blank_values(self):
+        import os, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from src import config
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "keys.txt"
+            path.write_text("﻿# comment\nANTHROPIC_API_KEY= sk-test \nGROQ_API_KEY=\nbad line\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"GROQ_API_KEY": "keep"}):
+                self.assertEqual(config.load_keys_file(path), 1)
+                self.assertEqual(os.environ["ANTHROPIC_API_KEY"], "sk-test")
+                self.assertEqual(os.environ["GROQ_API_KEY"], "keep")
