@@ -3,8 +3,9 @@
 Values are read, in order, from:
 1. A local ``.env`` file next to ``app.py`` (wins over the process environment,
    so a stale empty variable in the shell cannot hide a key saved in the file).
-2. A local ``keys.txt`` next to ``app.py`` (plain KEY=value lines; non-blank
-   values override ``.env``).
+2. A plain-text keys file: ``keys.txt`` or ``API keys.txt`` in the app folder or
+   its parent folder (or the path in ``KEYS_FILE``). Lines may be ``NAME=value``,
+   ``name: value`` or a bare key; non-blank values override ``.env``.
 3. The process environment.
 4. Streamlit secrets (``.streamlit/secrets.toml``) when running under Streamlit.
 
@@ -52,27 +53,88 @@ def load_env_file() -> bool:
     return True
 
 
-def load_keys_file(path: Path = KEYS_PATH) -> int:
-    """Load ``keys.txt`` (KEY=value lines) into the environment.
+KEY_ALIASES = {
+    "anthropic": "ANTHROPIC_API_KEY", "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "claude": "ANTHROPIC_API_KEY", "claude_api": "ANTHROPIC_API_KEY", "claude_api_key": "ANTHROPIC_API_KEY",
+    "groq": "GROQ_API_KEY", "groq_api": "GROQ_API_KEY", "groq_api_key": "GROQ_API_KEY",
+    "openai": "OPENAI_API_KEY", "openai_api": "OPENAI_API_KEY", "openai_api_key": "OPENAI_API_KEY",
+    "azure": "AZURE_SPEECH_KEY", "azure_key": "AZURE_SPEECH_KEY", "azure_speech_key": "AZURE_SPEECH_KEY",
+    "azure_region": "AZURE_SPEECH_REGION", "azure_speech_region": "AZURE_SPEECH_REGION",
+    "whatsapp": "WHATSAPP_ACCESS_TOKEN", "whatsapp_token": "WHATSAPP_ACCESS_TOKEN",
+    "whatsapp_access_token": "WHATSAPP_ACCESS_TOKEN",
+}
+KEY_PREFIXES = (("sk-ant-", "ANTHROPIC_API_KEY"), ("gsk_", "GROQ_API_KEY"), ("sk-", "OPENAI_API_KEY"))
+KEYS_FILE_NAMES = ("keys.txt", "api keys.txt", "api keys", "api_keys.txt", "apikeys.txt")
 
-    A plain text file for people who prefer Notepad over a dotfile. Only
-    non-blank values are applied, so an empty line never wipes a key that
-    ``.env`` already set. Returns the number of keys applied.
-    """
-    if not path.exists():
-        return 0
-    applied = 0
-    for raw in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
+
+def _normalize_key_name(name: str) -> str:
+    cleaned = name.strip().strip("#*-").strip().lower()
+    cleaned = "_".join(cleaned.replace("-", " ").split())
+    if cleaned in KEY_ALIASES:
+        return KEY_ALIASES[cleaned]
+    return cleaned.upper()
+
+
+def parse_keys_text(text: str) -> dict[str, str]:
+    """Parse a loose keys file: ``NAME=value``, ``name: value`` or bare keys."""
+    found: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip().lstrip("\ufeff")
+        if not line or line.startswith("#"):
             continue
-        key, value = line.split("=", 1)
-        key = key.strip().upper()
+        name, value = "", ""
+        if "=" in line:
+            name, value = line.split("=", 1)
+        elif ":" in line and not line.lower().startswith("http"):
+            name, value = line.split(":", 1)
+        else:
+            value = line
         value = _clean(value)
-        if key and value:
-            os.environ[key] = value
-            applied += 1
-    return applied
+        if not value:
+            continue
+        key = _normalize_key_name(name) if name.strip() else ""
+        if not key or key not in KEY_ALIASES.values() and not key.endswith(("_KEY", "_TOKEN", "_REGION", "_MODEL", "_VOICE", "_URL", "_VERSION", "_NUMBER", "_EFFORT")):
+            key = next((target for prefix, target in KEY_PREFIXES if value.startswith(prefix)), key)
+        if key:
+            found[key] = value
+    return found
+
+
+def find_keys_file() -> Path | None:
+    """First keys file found: KEYS_FILE env, app folder, then the parent folder."""
+    explicit = _clean(os.environ.get("KEYS_FILE"))
+    if explicit and Path(explicit).is_file():
+        return Path(explicit)
+    for folder in (APP_DIR, APP_DIR.parent):
+        try:
+            entries = {entry.name.lower(): entry for entry in folder.iterdir() if entry.is_file()}
+        except OSError:
+            continue
+        for name in KEYS_FILE_NAMES:
+            if name in entries:
+                return entries[name]
+    return None
+
+
+LOADED_KEYS_FILE: Path | None = None
+
+
+def load_keys_file(path: Path | None = None) -> int:
+    """Load a keys file into the environment. Returns the number of keys applied.
+
+    Only non-blank values are applied, so an empty line never wipes a key that
+    ``.env`` already set. The file is plain text so it can be edited in Notepad.
+    """
+    global LOADED_KEYS_FILE
+    path = path or find_keys_file()
+    if path is None or not path.exists():
+        return 0
+    values = parse_keys_text(path.read_text(encoding="utf-8-sig", errors="replace"))
+    for key, value in values.items():
+        os.environ[key] = value
+    if values:
+        LOADED_KEYS_FILE = path
+    return len(values)
 
 
 def _clean(value) -> str:

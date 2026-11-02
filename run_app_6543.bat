@@ -16,7 +16,11 @@ where ffmpeg >nul 2>nul || echo WARNING: ffmpeg not found on PATH. Install it: w
 
 if not exist ".env" copy /y ".env.example" ".env" >nul
 
-if not exist "keys.txt" (
+set "HAVE_KEYS="
+if exist "keys.txt" set "HAVE_KEYS=1"
+if exist "..\API keys.txt" set "HAVE_KEYS=1"
+if exist "..\API keys" set "HAVE_KEYS=1"
+if not defined HAVE_KEYS (
     copy /y "keys.example.txt" "keys.txt" >nul
     echo Created keys.txt - paste your Claude and Groq keys into it, save, then close Notepad.
     notepad "keys.txt"

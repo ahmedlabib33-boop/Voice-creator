@@ -47,7 +47,9 @@ db = get_db()
 # --- sidebar: credential and provider readiness (never shows values) ---------------
 with st.sidebar:
     st.header("Setup status")
-    st.caption("Keys are read from `.env` or Streamlit secrets. Values are never displayed.")
+    st.caption("Keys are read from `keys.txt` / `API keys.txt`, `.env`, or Streamlit secrets. Values are never displayed.")
+    if config.LOADED_KEYS_FILE:
+        st.caption(f"Keys file: `{config.LOADED_KEYS_FILE}`")
     for name, present in config.credential_status().items():
         st.write(("✅ " if present else "❌ ") + f"`{name}`")
     st.divider()

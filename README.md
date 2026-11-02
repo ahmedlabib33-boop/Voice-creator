@@ -50,8 +50,12 @@ ANTHROPIC_API_KEY=
 GROQ_API_KEY=
 ```
 
-`keys.txt` is ignored by git. The same names also work in `.env` (copy
-`.env.example` to `.env`); non-blank values in `keys.txt` win over `.env`.
+A file named `API keys.txt` (or `keys.txt`) in the **parent** folder works too, so you
+can keep one keys file outside the project. Lines may be `NAME=value`, `name: value`
+(for example `claude: sk-ant-...`, `groq: gsk_...`) or a bare key, which is matched by
+its prefix. Set `KEYS_FILE` to use any other path. `keys.txt` is ignored by git. The
+same names also work in `.env` (copy `.env.example` to `.env`); non-blank values in
+the keys file win over `.env`.
 `.env` is ignored by git. Never paste keys into chat, screenshots, or commits. If a key
 was ever displayed anywhere, revoke it and create a new one.
 

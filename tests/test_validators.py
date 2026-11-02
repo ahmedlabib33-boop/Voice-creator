@@ -61,3 +61,25 @@ class KeysFileTests(unittest.TestCase):
                 self.assertEqual(config.load_keys_file(path), 1)
                 self.assertEqual(os.environ["ANTHROPIC_API_KEY"], "sk-test")
                 self.assertEqual(os.environ["GROQ_API_KEY"], "keep")
+
+    def test_lenient_formats(self):
+        from src.config import parse_keys_text
+        text = "Claude API: sk-ant-abc\ngroq = gsk_xyz\nsk-proj-123\nWHATSAPP_ACCESS_TOKEN=EAAB\nnot a key\n"
+        parsed = parse_keys_text(text)
+        self.assertEqual(parsed["ANTHROPIC_API_KEY"], "sk-ant-abc")
+        self.assertEqual(parsed["GROQ_API_KEY"], "gsk_xyz")
+        self.assertEqual(parsed["OPENAI_API_KEY"], "sk-proj-123")
+        self.assertEqual(parsed["WHATSAPP_ACCESS_TOKEN"], "EAAB")
+        self.assertNotIn("NOT A KEY", parsed)
+
+    def test_finds_api_keys_file_in_parent_folder(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from src import config
+
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp); app = parent / "Voice-creator"; app.mkdir()
+            (parent / "API keys.txt").write_text("groq: gsk_1\n", encoding="utf-8")
+            with mock.patch.object(config, "APP_DIR", app):
+                self.assertEqual(config.find_keys_file(), parent / "API keys.txt")
