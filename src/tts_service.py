@@ -24,14 +24,16 @@ from pathlib import Path
 
 import requests
 
-from . import config, elevenlabs_service
+from . import config, edge_tts_service, elevenlabs_service, local_clone_service
 
-PROVIDER_ELEVENLABS = "ElevenLabs natural voice (clone-capable)"
+PROVIDER_EDGE = "Egyptian neural voice (free)"
+PROVIDER_LOCAL_CLONE = "Your cloned voice (free, local XTTS)"
+PROVIDER_ELEVENLABS = "ElevenLabs natural voice (paid, clone-capable)"
 PROVIDER_GROQ = "Groq Orpheus Arabic TTS"
 PROVIDER_OPENAI = "OpenAI TTS"
 PROVIDER_AZURE = "Azure Arabic Egypt Neural TTS"
 PROVIDER_WINDOWS = "Windows TTS fallback"
-PROVIDER_ORDER = [PROVIDER_ELEVENLABS, PROVIDER_AZURE, PROVIDER_GROQ, PROVIDER_OPENAI, PROVIDER_WINDOWS]
+PROVIDER_ORDER = [PROVIDER_EDGE, PROVIDER_LOCAL_CLONE, PROVIDER_ELEVENLABS, PROVIDER_AZURE, PROVIDER_GROQ, PROVIDER_OPENAI, PROVIDER_WINDOWS]
 
 GROQ_MAX_CHARS = 200
 OPENAI_MAX_CHARS = 4000
@@ -63,6 +65,25 @@ def provider_statuses() -> list[ProviderStatus]:
     """Readiness per provider. Messages never contain secret values."""
     statuses = []
 
+    edge_ok = edge_tts_service.available()
+    statuses.append(
+        ProviderStatus(
+            PROVIDER_EDGE,
+            edge_ok,
+            "Ready: Salma (Egyptian female) and Shakir. No key needed." if edge_ok else "Run: pip install -r requirements.txt",
+        )
+    )
+    local_ok = local_clone_service.available()
+    clones = local_clone_service.list_clones()
+    statuses.append(
+        ProviderStatus(
+            PROVIDER_LOCAL_CLONE,
+            local_ok and bool(clones),
+            (f"Ready: {len(clones)} cloned voice(s)." if clones else "Installed. Clone a voice in the Voice lab.")
+            if local_ok else local_clone_service.install_hint(),
+            warning="Runs on this PC. CPU generation is slow; a GPU is much faster.",
+        )
+    )
     statuses.append(
         ProviderStatus(
             PROVIDER_ELEVENLABS,
@@ -110,7 +131,7 @@ def default_provider() -> str:
     for status in provider_statuses():
         if status.ready:
             return status.name
-    return PROVIDER_ELEVENLABS
+    return PROVIDER_EDGE
 
 
 def _pyttsx3_available() -> bool:
@@ -227,17 +248,43 @@ def generate_speech(text: str, provider: str, voice: str | None = None, output_d
         raise ValueError("Enter some text to convert to speech.")
     output = new_output_path(output_dir)
     generators = {
-        PROVIDER_ELEVENLABS: _generate_elevenlabs,
         PROVIDER_GROQ: _generate_groq,
         PROVIDER_OPENAI: _generate_openai,
         PROVIDER_AZURE: _generate_azure,
         PROVIDER_WINDOWS: _generate_windows,
     }
-    if provider not in generators:
+    if provider not in PROVIDER_ORDER:
         raise ValueError(f"Unknown provider: {provider}")
     if provider == PROVIDER_ELEVENLABS:
         return _generate_elevenlabs(text, voice or "", output, options or {})
+    if provider == PROVIDER_EDGE:
+        return _generate_edge(text, voice or "", output, options or {})
+    if provider == PROVIDER_LOCAL_CLONE:
+        return _generate_local_clone(text, voice or "", output)
     return generators[provider](text, voice or "", output)
+
+
+def _generate_edge(text: str, voice: str, output: Path, options: dict) -> Path:
+    try:
+        return edge_tts_service.synthesize(text, voice, output, options.get("rate_pct"), options.get("pitch_hz"))
+    except edge_tts_service.EdgeSetupError as exc:
+        raise TTSSetupError(str(exc)) from exc
+    except edge_tts_service.EdgeError as exc:
+        raise TTSGenerationError(str(exc)) from exc
+
+
+def _generate_local_clone(text: str, voice: str, output: Path) -> Path:
+    if not voice:
+        raise TTSSetupError("Choose one of your cloned voices.")
+    chunks = split_text(text, local_clone_service.MAX_CHARS)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            parts = [local_clone_service.synthesize_wav(c, voice, Path(tmp) / f"part_{i:03d}.wav") for i, c in enumerate(chunks)]
+            return merge_to_mp3(parts, output)
+    except local_clone_service.LocalCloneSetupError as exc:
+        raise TTSSetupError(str(exc)) from exc
+    except local_clone_service.LocalCloneError as exc:
+        raise TTSGenerationError(str(exc)) from exc
 
 
 def _generate_elevenlabs(text: str, voice: str, output: Path, options: dict) -> Path:

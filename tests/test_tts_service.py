@@ -65,7 +65,8 @@ class ProviderTests(unittest.TestCase):
     def test_default_provider_falls_through_when_no_keys(self):
         with mock.patch.dict(os.environ, {"GROQ_API_KEY": "", "OPENAI_API_KEY": "", "AZURE_SPEECH_KEY": "", "AZURE_SPEECH_REGION": ""}), mock.patch.object(config, "_streamlit_secret", return_value=None):
             statuses = tts_service.provider_statuses()
-        self.assertEqual([s.ready for s in statuses[:3]], [False, False, False])
+        keyed = {s.name: s.ready for s in statuses}
+        self.assertEqual([keyed[tts_service.PROVIDER_GROQ], keyed[tts_service.PROVIDER_OPENAI], keyed[tts_service.PROVIDER_AZURE]], [False, False, False])
         self.assertNotIn("test", "".join(s.message for s in statuses))
 
 

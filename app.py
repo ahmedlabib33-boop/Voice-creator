@@ -23,11 +23,13 @@ from src.text_refiner import (
     refine_to_egyptian,
     write_message,
 )
-from src import elevenlabs_service
+from src import edge_tts_service, elevenlabs_service, local_clone_service
 from src.tts_service import (
     GROQ_ARABIC_VOICES,
+    PROVIDER_EDGE,
     PROVIDER_ELEVENLABS,
     PROVIDER_GROQ,
+    PROVIDER_LOCAL_CLONE,
     PROVIDER_ORDER,
     PROVIDER_WINDOWS,
     TTSGenerationError,
@@ -69,7 +71,7 @@ with st.sidebar:
     if config.LOADED_KEYS_FILE:
         st.caption(f"Keys file: `{config.LOADED_KEYS_FILE.name}`")
     key_labels = {
-        "ELEVENLABS_API_KEY": "ElevenLabs key", "ANTHROPIC_API_KEY": "Claude key", "GROQ_API_KEY": "Groq key", "OPENAI_API_KEY": "OpenAI key",
+        "ELEVENLABS_API_KEY": "ElevenLabs key (optional)", "ANTHROPIC_API_KEY": "Claude key", "GROQ_API_KEY": "Groq key", "OPENAI_API_KEY": "OpenAI key",
         "AZURE_SPEECH_KEY": "Azure key", "AZURE_SPEECH_REGION": "Azure region", "WHATSAPP_ACCESS_TOKEN": "WhatsApp token",
     }
     chips([(key_labels.get(name, name), "ok" if present else "off", "") for name, present in creds.items()])
@@ -196,7 +198,7 @@ with tab_generate:
             st.warning(engine_msg)
 
     # ---- Step 2: voice -------------------------------------------------------
-    step(2, "Generate the voice", "ElevenLabs natural voice first (soft Egyptian female or your clone); Azure, Groq, OpenAI and Windows as alternatives.")
+    step(2, "Generate the voice", "Free Egyptian neural voice by default, or your own cloned voice. Paid providers are optional.")
     col_prov, col_voice, col_go = st.columns([2, 1.4, 1.2], gap="large")
 
     with col_prov:
@@ -204,7 +206,7 @@ with tab_generate:
             "Voice provider",
             PROVIDER_ORDER,
             index=PROVIDER_ORDER.index(default_provider()),
-            help="Order of preference: ElevenLabs, Azure Egyptian, Groq, OpenAI, then the Windows fallback.",
+            help="Free first: Egyptian neural voice, then your local clone. ElevenLabs, Azure, Groq, OpenAI and Windows follow.",
         )
         status = next(s for s in statuses if s.name == provider)
         if not status.ready:
@@ -214,7 +216,26 @@ with tab_generate:
 
     voice_options: dict = {}
     with col_voice:
-        if provider == PROVIDER_ELEVENLABS:
+        if provider == PROVIDER_EDGE:
+            ids = list(edge_tts_service.VOICES)
+            voice = st.selectbox("Voice", ids, format_func=lambda v: edge_tts_service.VOICES[v])
+            with st.expander("Delivery", expanded=False):
+                rate = st.slider("Pace", -30, 20, -6, 1, help="Negative = slower, softer.")
+                pitch = st.slider("Pitch", -20, 10, -2, 1, help="Negative = slightly lower, warmer.")
+            voice_options = {"rate_pct": rate, "pitch_hz": pitch}
+            st.caption("Free Microsoft neural voice. Needs internet; no key.")
+        elif provider == PROVIDER_LOCAL_CLONE:
+            local_clones = local_clone_service.list_clones()
+            if local_clones:
+                names = [f"★ {c['name']}" for c in local_clones]
+                voice = local_clones[names.index(st.selectbox("Cloned voice", names))]["voice_id"]
+                st.caption("Runs on this PC. First use downloads the model; CPU generation takes a while.")
+            else:
+                voice = ""
+                st.info("No local clone yet. Create one in the Voice lab tab.")
+            if not local_clone_service.available():
+                st.warning(local_clone_service.install_hint())
+        elif provider == PROVIDER_ELEVENLABS:
             voices = cached_voices(elevenlabs_service.available())
             clones = {c["voice_id"] for c in db.list_voice_clones("elevenlabs")}
             if voices:
@@ -349,12 +370,21 @@ with tab_generate:
 # Voice lab: natural voices and consent-gated cloning
 # =============================================================================
 with tab_voicelab:
-    step(1, "Clone a voice", "Upload clean samples of the speaker, confirm consent, and the clone appears in Step 2.")
-    if not elevenlabs_service.available():
-        st.warning("Add ELEVENLABS_API_KEY to your keys file to enable natural voices and cloning.")
+    step(1, "Clone a voice", "Upload clean samples, confirm consent, and the clone appears in Step 2 under “Your cloned voice”.")
+    backend = st.radio(
+        "Cloning engine",
+        ["Free · local XTTS v2 (runs on this PC)", "ElevenLabs (paid account)"],
+        horizontal=True,
+        key="clone_backend",
+    )
+    use_local = backend.startswith("Free")
+    if use_local and not local_clone_service.available():
+        st.warning(local_clone_service.install_hint() + "  (Python 3.10–3.14, about 2 GB on first use.)")
+    if not use_local and not elevenlabs_service.available():
+        st.warning("Add ELEVENLABS_API_KEY to your keys file to use ElevenLabs cloning.")
     st.caption(
         "For an authentic Egyptian accent, clone an Egyptian speaker you have permission from. "
-        "Best results: 1–3 minutes of clear speech, one speaker, no music or echo. Instant cloning gets close, not identical."
+        "Best results: 1–3 minutes of clear speech, one speaker, no music or echo. Cloning gets close, not identical."
     )
     with st.form("clone_voice", clear_on_submit=False):
         v1, v2 = st.columns(2, gap="large")
@@ -363,18 +393,21 @@ with tab_voicelab:
         samples = st.file_uploader(
             "Audio samples (mp3, wav, m4a, ogg)", type=["mp3", "wav", "m4a", "ogg", "flac"], accept_multiple_files=True
         )
-        remove_noise = st.checkbox("Remove background noise", value=True)
+        remove_noise = st.checkbox("Remove background noise (ElevenLabs only)", value=True)
         consent = st.checkbox(elevenlabs_service.CONSENT_TEXT)
-        submitted = st.form_submit_button("Clone voice", type="primary", disabled=not elevenlabs_service.available())
+        license_ok = st.checkbox(local_clone_service.LICENSE_TEXT) if use_local else True
+        submitted = st.form_submit_button("Clone voice", type="primary")
     if submitted:
         if not consent:
             st.error("Tick the consent confirmation first. Cloning without the speaker's permission is not allowed.")
+        elif use_local and not license_ok:
+            st.error("Accept the XTTS model license to use local cloning.")
         elif not samples:
             st.error("Upload at least one audio sample.")
         else:
             import tempfile
 
-            with st.spinner("Cloning..."):
+            with st.spinner("Preparing the clone..."):
                 try:
                     with tempfile.TemporaryDirectory() as tmp:
                         paths = []
@@ -382,41 +415,51 @@ with tab_voicelab:
                             dest = Path(tmp) / up.name
                             dest.write_bytes(up.getbuffer())
                             paths.append(dest)
-                        result = elevenlabs_service.clone_voice(
-                            clone_name, paths, remove_noise=remove_noise,
-                            labels={"language": "ar", "accent": "Egyptian", "gender": clone_gender},
-                        )
-                    db.add_voice_clone("elevenlabs", result.voice.voice_id, clone_name, len(samples), elevenlabs_service.CONSENT_TEXT)
-                    cached_voices.clear()
-                    msg = f"Cloned “{clone_name}”. Select it in Step 2 under ElevenLabs."
-                    if result.requires_verification:
-                        msg += " ElevenLabs asks you to verify this voice in their dashboard before use."
-                    st.success(msg)
-                except (ValueError, elevenlabs_service.ElevenLabsSetupError, elevenlabs_service.ElevenLabsError) as exc:
+                        if use_local:
+                            info = local_clone_service.prepare_clone(clone_name, paths)
+                            db.add_voice_clone("local_xtts", info["voice_id"], clone_name, len(paths),
+                                               elevenlabs_service.CONSENT_TEXT + " | " + local_clone_service.LICENSE_TEXT)
+                            st.success(f"Clone “{clone_name}” is ready. In Step 2 choose “{PROVIDER_LOCAL_CLONE}”.")
+                        else:
+                            result = elevenlabs_service.clone_voice(
+                                clone_name, paths, remove_noise=remove_noise,
+                                labels={"language": "ar", "accent": "Egyptian", "gender": clone_gender},
+                            )
+                            db.add_voice_clone("elevenlabs", result.voice.voice_id, clone_name, len(paths), elevenlabs_service.CONSENT_TEXT)
+                            cached_voices.clear()
+                            msg = f"Cloned “{clone_name}”. Select it in Step 2 under ElevenLabs."
+                            if result.requires_verification:
+                                msg += " ElevenLabs asks you to verify this voice in their dashboard before use."
+                            st.success(msg)
+                except (ValueError, local_clone_service.LocalCloneSetupError, local_clone_service.LocalCloneError,
+                        elevenlabs_service.ElevenLabsSetupError, elevenlabs_service.ElevenLabsError) as exc:
                     st.error(str(exc))
 
     step(2, "Your cloned voices", "Consent is recorded locally for each clone.")
-    clones = db.list_voice_clones("elevenlabs")
+    clones = db.list_voice_clones()
     if clones:
         st.dataframe(
-            [{k: c[k] for k in ("name", "voice_id", "sample_count", "consent_at")} for c in clones],
+            [{k: c[k] for k in ("name", "provider", "voice_id", "sample_count", "consent_at")} for c in clones],
             use_container_width=True, hide_index=True,
         )
-        pick = st.selectbox("Clone", [f"{c['name']} ({c['voice_id']})" for c in clones])
-        if st.button("Delete this clone from ElevenLabs and this app"):
-            vid = pick.rsplit("(", 1)[1].rstrip(")")
+        pick = st.selectbox("Clone", [f"{c['name']} · {c['provider']} ({c['voice_id']})" for c in clones])
+        if st.button("Delete this clone"):
+            chosen = clones[[f"{c['name']} · {c['provider']} ({c['voice_id']})" for c in clones].index(pick)]
             try:
-                elevenlabs_service.delete_voice(vid)
-            except (elevenlabs_service.ElevenLabsSetupError, elevenlabs_service.ElevenLabsError) as exc:
-                st.warning(f"ElevenLabs: {exc}")
-            db.delete_voice_clone(vid)
-            cached_voices.clear()
+                if chosen["provider"] == "elevenlabs":
+                    elevenlabs_service.delete_voice(chosen["voice_id"])
+                    cached_voices.clear()
+                else:
+                    local_clone_service.delete_clone(chosen["voice_id"])
+            except (elevenlabs_service.ElevenLabsSetupError, elevenlabs_service.ElevenLabsError, ValueError) as exc:
+                st.warning(str(exc))
+            db.delete_voice_clone(chosen["voice_id"])
             st.rerun()
     else:
         st.caption("No clones yet.")
 
-    step(3, "Premade natural voices", "Any voice from your ElevenLabs library shows up in Step 2. Female voices are listed first.")
-    st.caption("Add Arabic female voices to your library in the ElevenLabs dashboard (Voice Library → Arabic), then they appear here.")
+    step(3, "Free Egyptian voices", "No account needed: Salma (female) and Shakir (male) are always available in Step 2.")
+    st.caption("Paid option: with ELEVENLABS_API_KEY, any voice from your ElevenLabs library also appears in Step 2.")
 
 # =============================================================================
 # Contacts

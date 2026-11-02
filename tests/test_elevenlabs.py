@@ -74,12 +74,15 @@ class ElevenLabsTests(unittest.TestCase):
             elevenlabs_service.clone_voice("n", [])
 
     def test_provider_order_and_default(self):
-        self.assertEqual(tts_service.PROVIDER_ORDER[0], tts_service.PROVIDER_ELEVENLABS)
-        self.assertEqual(tts_service.PROVIDER_ORDER[1], tts_service.PROVIDER_AZURE)
-        with mock.patch.dict(os.environ, {"ELEVENLABS_API_KEY": "", "GROQ_API_KEY": "g", "AZURE_SPEECH_KEY": "", "AZURE_SPEECH_REGION": "", "OPENAI_API_KEY": ""}), \
+        order = tts_service.PROVIDER_ORDER
+        self.assertLess(order.index(tts_service.PROVIDER_ELEVENLABS), order.index(tts_service.PROVIDER_AZURE))
+        self.assertLess(order.index(tts_service.PROVIDER_AZURE), order.index(tts_service.PROVIDER_GROQ))
+        with mock.patch.object(tts_service.edge_tts_service, "available", return_value=False), \
+             mock.patch.dict(os.environ, {"ELEVENLABS_API_KEY": "", "GROQ_API_KEY": "g", "AZURE_SPEECH_KEY": "", "AZURE_SPEECH_REGION": "", "OPENAI_API_KEY": ""}), \
              mock.patch.object(config, "_streamlit_secret", return_value=None):
             self.assertEqual(tts_service.default_provider(), tts_service.PROVIDER_GROQ)
-        self.assertEqual(tts_service.default_provider(), tts_service.PROVIDER_ELEVENLABS)
+        with mock.patch.object(tts_service.edge_tts_service, "available", return_value=False):
+            self.assertEqual(tts_service.default_provider(), tts_service.PROVIDER_ELEVENLABS)
 
     def test_generate_speech_routes_options_to_elevenlabs(self):
         seen = {}

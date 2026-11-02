@@ -27,30 +27,37 @@ providers below.
 
 ## Voice providers (in order of preference)
 
-| # | Provider | Default model / voice | Notes |
-|---|----------|-----------------------|-------|
-| 1 | ElevenLabs natural voice | `eleven_multilingual_v2` (switch to `eleven_v4` for top quality) | Natural, soft delivery with tunable softness/pace. Pick any voice from your ElevenLabs library, or **clone a voice** in the Voice lab tab. |
-| 2 | Azure Arabic Egypt Neural TTS | `ar-EG-SalmaNeural` | Microsoft's Egyptian Arabic female neural voice via the Speech REST endpoint. |
-| 3 | Groq Orpheus Arabic TTS | `canopylabs/orpheus-arabic-saudi` / `noura` | WAV only, 200 chars per request. The app splits long text and merges chunks with ffmpeg. Voices: noura, lulwa, aisha, abdullah, fahad, sultan. |
-| 4 | OpenAI TTS | `gpt-4o-mini-tts` / `alloy` | MP3 output. |
-| 5 | Windows TTS fallback | SAPI5 via `pyttsx3` | Offline, robotic, Windows only. Shown with a warning. |
+Free options come first. Nothing below needs a paid account unless marked.
 
-The first provider whose credentials are present is selected by default.
+| # | Provider | Voice | Cost | Notes |
+|---|----------|-------|------|-------|
+| 1 | Egyptian neural voice | `ar-EG-SalmaNeural` (female, soft) / `ar-EG-ShakirNeural` | Free, no key | Microsoft neural voices via Edge read-aloud. Needs internet. Pace and pitch sliders. **Default.** |
+| 2 | Your cloned voice (local XTTS v2) | clone of an uploaded sample | Free, runs on your PC | Install once with `install_local_clone.bat`. Speaks Arabic in the cloned voice. CPU is slow, GPU is fast. |
+| 3 | ElevenLabs | library voice or clone | Paid account | Optional. Highest quality and cloud cloning. |
+| 4 | Azure Arabic Egypt Neural TTS | `ar-EG-SalmaNeural` | Azure key | Same voice as #1 through the paid Azure endpoint. |
+| 5 | Groq Orpheus Arabic TTS | `canopylabs/orpheus-arabic-saudi` / `noura` | Groq key | Saudi-dialect model. |
+| 6 | OpenAI TTS | `gpt-4o-mini-tts` / `alloy` | OpenAI key | |
+| 7 | Windows TTS fallback | SAPI5 via `pyttsx3` | Free, offline | Robotic. Windows only. |
 
-### Egyptian female voice and voice cloning (Voice lab tab)
+The first provider that is ready is selected by default, so the free Egyptian voice is
+what you get out of the box.
 
-* **Natural Egyptian female voice**: with `ELEVENLABS_API_KEY` set, add an Arabic female
-  voice to your ElevenLabs library (Voice Library → Arabic) and pick it in Step 2. The
-  "Delivery" panel tunes softness, closeness, expressiveness and pace. Azure's
-  `ar-EG-SalmaNeural` is the no-setup Egyptian alternative.
-* **Cloning**: upload 1–3 minutes of clean speech from one speaker, tick the consent
-  confirmation, and the clone appears in Step 2 (marked ★). Instant cloning gets close
-  to the speaker, not identical. For an authentic Egyptian accent, clone an Egyptian
-  speaker. Consent is recorded in the local database for every clone, and all output
-  keeps the "Generated AI voice audio." label. Do not clone anyone without their
-  permission. You can
-pick any provider in the UI; missing keys produce a clear setup message that never
-shows secret values.
+### Voice cloning for free (Voice lab tab)
+
+1. Run `install_local_clone.bat` once (Python 3.10–3.14, about 2 GB download on first
+   use). This installs Coqui XTTS v2, an open-source model that runs on your PC.
+2. In the Voice lab tab choose **Free · local XTTS v2**, upload 1–3 minutes of clean
+   speech from one speaker, tick the consent confirmation and the model license, and
+   click Clone. Samples are normalized and stored under `data/voices/`.
+3. In Step 2 choose **Your cloned voice** and generate. The first run loads the model,
+   later runs are faster. Cloning gets close to the speaker, not identical.
+
+For an authentic Egyptian accent, clone an Egyptian speaker you have permission from.
+Consent is recorded for every clone, all output keeps the "Generated AI voice audio."
+label, and cloning anyone without their permission is not supported. The XTTS model
+license is non-commercial.
+
+ElevenLabs cloning remains available as a paid alternative (`ELEVENLABS_API_KEY`).
 
 ## Setup
 
@@ -80,9 +87,9 @@ the keys file win over `.env`.
 was ever displayed anywhere, revoke it and create a new one.
 
 ```env
-ELEVENLABS_API_KEY=
-ANTHROPIC_API_KEY=
 GROQ_API_KEY=
+ANTHROPIC_API_KEY=
+ELEVENLABS_API_KEY=
 OPENAI_API_KEY=
 AZURE_SPEECH_KEY=
 AZURE_SPEECH_REGION=
