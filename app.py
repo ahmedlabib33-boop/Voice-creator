@@ -23,7 +23,7 @@ from src.text_refiner import (
     refine_to_egyptian,
     write_message,
 )
-from src import edge_tts_service, elevenlabs_service, local_clone_service
+from src import edge_tts_service, elevenlabs_service, humanize, local_clone_service
 from src.tts_service import (
     GROQ_ARABIC_VOICES,
     PROVIDER_EDGE,
@@ -277,10 +277,21 @@ with tab_generate:
 
     with col_go:
         st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        natural = st.toggle("Humanize", value=True, help="Adds warmth, breath and a tiny room so it sounds less digital. Words are unchanged.")
+        natural_strength = st.slider("Amount", 0.0, 1.0, 0.5, 0.1, disabled=not natural, label_visibility="collapsed")
         if st.button("Generate voice", type="primary", use_container_width=True, disabled=not text.strip()):
             with st.spinner(f"Generating with {provider}..."):
                 try:
                     mp3 = generate_speech(text, provider, voice or None, options=voice_options)
+                    if natural:
+                        raw = mp3.with_name(mp3.stem + "_raw.mp3")
+                        mp3.rename(raw)
+                        try:
+                            humanize.humanize(raw, mp3, natural_strength)
+                            raw.unlink(missing_ok=True)
+                        except humanize.HumanizeError as exc:
+                            raw.rename(mp3)
+                            st.warning(f"Humanize skipped: {exc}")
                     st.session_state["last_audio"] = str(mp3)
                     st.toast(f"Saved {mp3.name}", icon="✅")
                 except TTSSetupError as exc:
